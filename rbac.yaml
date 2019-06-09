@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: oauther
+  namespace: oauther
 
 ---
 
@@ -9,7 +10,14 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: oauth-refresher
+  namespace: default
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
 - apiGroups:
   - ""
   resources:
@@ -30,11 +38,8 @@ metadata:
   namespace: default
 subjects:
 - kind: ServiceAccount
-  name: default
-  namespace: default
-- kind: ServiceAccount
   name: oauther
-  namespace: default
+  namespace: oauther
 roleRef:
   kind: Role
   name: oauth-refresher
