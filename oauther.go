@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,19 +27,18 @@ import (
 )
 
 var (
-	token           *oauth2.Token
-	ctx             context.Context
-	conf            *oauth2.Config
-	state           string
-	baseURL         string
-	port            string
-	tls             bool
-	certFile        string
-	keyFile         string
-	tokenFile       string
-	secretNamespace string
-	secretName      string
+	ctx        context.Context
+	conf       *oauth2.Config
+	state      string
+	baseURL    string
+	port       string
+	tls        bool
+	certFile   string
+	keyFile    string
+	tokenFile  string
+	secretName string
 )
+
 var clientset *kubernetes.Clientset
 
 func setup() {
@@ -48,7 +48,6 @@ func setup() {
 	flag.StringVar(&certFile, "cert-file", "tls.crt", "")
 	flag.StringVar(&keyFile, "key-file", "tls.key", "")
 	flag.StringVar(&tokenFile, "token-file", "", "")
-	flag.StringVar(&secretNamespace, "secret-namespace", "", "")
 	flag.StringVar(&secretName, "secret-name", "", "")
 	flag.Parse()
 
@@ -99,8 +98,39 @@ type patchOperation struct {
 }
 
 func refresh() {
-	// Force refresh token
-	token.Expiry = time.Now()
+	list, err := clientset.CoreV1().Namespaces().List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("Failed to list namespaces: %+v", err)
+		return
+	}
+
+	for _, ns := range list.Items {
+		refreshSingle(ns.Name, secretName)
+	}
+}
+
+func refreshSingle(secretNamespace, secretName string) {
+	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(secretName, metav1.GetOptions{})
+	if err != nil {
+		// This function scans all namespaces for secrets
+		// If a secret is not found it's nothing to worry about :)
+		if strings.HasSuffix(err.Error(), "not found") {
+			return
+		}
+
+		log.Printf("Get secret failed: %s/%s: %+v", secretNamespace, secretName, err)
+		return
+	}
+
+	log.Printf("Starting refresh of: %s/%s", secretNamespace, secretName)
+
+	// reconstruct oauth2 object
+	expiry, _ := time.Parse(time.RFC3339, string(secret.Data["expiry"]))
+	token := &oauth2.Token{
+		AccessToken:  string(secret.Data["accesstoken"]),
+		RefreshToken: string(secret.Data["refreshtoken"]),
+		Expiry:       expiry,
+	}
 
 	newToken, err := conf.TokenSource(oauth2.NoContext, token).Token()
 	if err != nil {
@@ -109,7 +139,7 @@ func refresh() {
 
 	if newToken.AccessToken != token.AccessToken {
 		token = newToken
-		log.Println("Saved new token")
+		log.Println("Access token has changed")
 	}
 
 	if tokenFile != "" {
@@ -136,6 +166,21 @@ func refresh() {
 					Path:  "/stringData/accesstoken",
 					Value: token.AccessToken,
 				},
+				patchOperation{
+					Op:    "add",
+					Path:  "/stringData/refreshtoken",
+					Value: token.RefreshToken,
+				},
+				patchOperation{
+					Op:    "add",
+					Path:  "/stringData/expiry",
+					Value: token.Expiry.Format(time.RFC3339),
+				},
+				patchOperation{
+					Op:    "add",
+					Path:  "/stringData/updated",
+					Value: time.Now().Format(time.RFC3339),
+				},
 			}
 			raw, err := json.Marshal(patch)
 			if err != nil {
@@ -150,31 +195,77 @@ func refresh() {
 			}
 		} else {
 			fmt.Println(err.Error())
-			// Create new
-			s := apiv1.Secret{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Secret",
-					APIVersion: "v1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: secretNamespace,
-				},
-				Data: map[string][]byte{
-					"accesstoken": []byte(token.AccessToken),
-				},
-				Type: "Opaque",
-			}
-			_, err := secrets.Create(&s)
-			if err == nil {
-				log.Printf("Created secret %s/%s", secretNamespace, secretName)
-			} else {
-				fmt.Println("ERROR:", err)
-			}
+			createTokenSecret(token, secretNamespace, secretName)
 		}
+	}
+}
 
+func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) {
+	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
+
+	// Create the namespace if it doesn't exist
+	_, err := clientset.CoreV1().Namespaces().Create(&apiv1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretNamespace,
+		},
+	})
+	log.Printf("Create namespace: %s: %+v", secretNamespace, err)
+
+	// Create new
+	s := apiv1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: secretNamespace,
+		},
+		Data: map[string][]byte{
+			"accesstoken":  []byte(token.AccessToken),
+			"refreshtoken": []byte(token.RefreshToken),
+			"expiry":       []byte(token.Expiry.Format(time.RFC3339)),
+			"updated":      []byte(time.Now().Format(time.RFC3339)),
+		},
+		Type: "Opaque",
 	}
 
+	secrets := clientset.CoreV1().Secrets(secretNamespace)
+	_, err = secrets.Create(&s)
+	if err == nil {
+		log.Printf("Created secret %s/%s", secretNamespace, secretName)
+	} else {
+		fmt.Println("ERROR:", err)
+	}
+}
+
+func getSpotifyUsername(token *oauth2.Token) (string, error) {
+	client := conf.Client(ctx, token)
+	res, err := client.Get("https://api.spotify.com/v1/me")
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+
+	type spotifyMe struct {
+		ID string `json:"id"` // id or username
+	}
+
+	var me spotifyMe
+	err = json.Unmarshal(body, &me)
+	if err != nil {
+		return "", err
+	}
+	return me.ID, nil
 }
 
 func main() {
@@ -192,21 +283,9 @@ func main() {
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if token == nil {
-			fmt.Fprintf(w, "Hello world, go to: %s", baseURL+"/auth")
-		} else {
-			client := conf.Client(ctx, token)
-			res, err := client.Get("https://api.spotify.com/v1/me")
-			if err != nil {
-				log.Fatal(err)
-			}
-			body, err := ioutil.ReadAll(res.Body)
-			res.Body.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Fprintf(w, string(body))
-		}
+		authURL := baseURL + "/auth"
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, "Hello world, go to: <a href=\"%s\">%s</a>", authURL, authURL)
 	})
 
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -214,14 +293,18 @@ func main() {
 		if state != u.Query().Get("state") {
 			log.Fatal("Invalid state")
 		}
-		t, err := conf.Exchange(ctx, u.Query().Get("code"))
+		token, err := conf.Exchange(ctx, u.Query().Get("code"))
 		if err != nil {
 			log.Fatal(err)
 		}
-		token = t
-		defer refresh()
 
-		http.Redirect(w, r, baseURL, 302)
+		username, err := getSpotifyUsername(token)
+		if err != nil {
+			log.Printf("failed to load username: %+v", err)
+		}
+
+		createTokenSecret(token, username, secretName)
+		fmt.Fprintf(w, fmt.Sprintf("Welcome, %s!", username))
 	})
 
 	s := http.Server{
@@ -241,15 +324,16 @@ func main() {
 		}
 	}()
 
+	// perform initial refresh
+	refresh()
+
 	ticker := time.NewTicker(10 * 60 * time.Second)
 	quit := make(chan bool)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				if token != nil {
-					refresh()
-				}
+				refresh()
 			case <-quit:
 				ticker.Stop()
 				return
