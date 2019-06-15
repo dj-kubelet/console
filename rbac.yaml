@@ -17,7 +17,30 @@ rules:
   resources:
   - secrets
   verbs:
+  - get
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: oauth-refresher
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - list
   - create
+
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+
 - apiGroups:
   - ""
   resources:
@@ -42,5 +65,20 @@ subjects:
   namespace: oauther
 roleRef:
   kind: Role
+  name: oauth-refresher
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: oauther-cluster
+subjects:
+- kind: ServiceAccount
+  name: oauther
+  namespace: oauther
+roleRef:
+  kind: ClusterRole
   name: oauth-refresher
   apiGroup: rbac.authorization.k8s.io
