@@ -311,7 +311,9 @@ func main() {
 		Addr: port,
 		Handler: func(handler http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				log.Printf("%s %s %s\n", r.RemoteAddr, r.Method, r.URL)
+				if r.URL.Path != "/healthz" {
+					log.Printf("%s %s %s\n", r.RemoteAddr, r.Method, r.URL.Path)
+				}
 				handler.ServeHTTP(w, r)
 			})
 		}(http.DefaultServeMux),
