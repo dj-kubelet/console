@@ -303,7 +303,7 @@ func main() {
 			log.Printf("failed to load username: %+v", err)
 		}
 
-		createTokenSecret(token, username, secretName)
+		go createTokenSecret(token, username, secretName)
 		fmt.Fprintf(w, fmt.Sprintf("Welcome, %s!", username))
 	})
 
