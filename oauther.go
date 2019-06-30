@@ -329,7 +329,7 @@ func main() {
 	// perform initial refresh
 	refresh()
 
-	ticker := time.NewTicker(10 * 60 * time.Second)
+	ticker := time.NewTicker(10 * time.Minute)
 	quit := make(chan bool)
 	go func() {
 		for {
