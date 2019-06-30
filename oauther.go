@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -35,7 +33,6 @@ var (
 	tls        bool
 	certFile   string
 	keyFile    string
-	tokenFile  string
 	secretName string
 )
 
@@ -47,8 +44,7 @@ func setup() {
 	flag.BoolVar(&tls, "tls", true, "")
 	flag.StringVar(&certFile, "cert-file", "tls.crt", "")
 	flag.StringVar(&keyFile, "key-file", "tls.key", "")
-	flag.StringVar(&tokenFile, "token-file", "", "")
-	flag.StringVar(&secretName, "secret-name", "", "")
+	flag.StringVar(&secretName, "secret-name", "spotify-oauth", "")
 	flag.Parse()
 
 	clientID, ok := os.LookupEnv("CLIENT_ID")
@@ -91,115 +87,6 @@ func setup() {
 	clientset = kubernetes.NewForConfigOrDie(config)
 }
 
-type patchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
-
-func refresh() {
-	list, err := clientset.CoreV1().Namespaces().List(metav1.ListOptions{})
-	if err != nil {
-		log.Printf("Failed to list namespaces: %+v", err)
-		return
-	}
-
-	for _, ns := range list.Items {
-		refreshSingle(ns.Name, secretName)
-	}
-}
-
-func refreshSingle(secretNamespace, secretName string) {
-	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(secretName, metav1.GetOptions{})
-	if err != nil {
-		// This function scans all namespaces for secrets
-		// If a secret is not found it's nothing to worry about :)
-		if strings.HasSuffix(err.Error(), "not found") {
-			return
-		}
-
-		log.Printf("Get secret failed: %s/%s: %+v", secretNamespace, secretName, err)
-		return
-	}
-
-	log.Printf("Starting refresh of: %s/%s", secretNamespace, secretName)
-
-	// reconstruct oauth2 object
-	expiry, _ := time.Parse(time.RFC3339, string(secret.Data["expiry"]))
-	token := &oauth2.Token{
-		AccessToken:  string(secret.Data["accesstoken"]),
-		RefreshToken: string(secret.Data["refreshtoken"]),
-		Expiry:       expiry,
-	}
-
-	newToken, err := conf.TokenSource(oauth2.NoContext, token).Token()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	if newToken.AccessToken != token.AccessToken {
-		token = newToken
-		log.Println("Access token has changed")
-	}
-
-	if tokenFile != "" {
-		err = ioutil.WriteFile(tokenFile, []byte(token.AccessToken), 0644)
-		if err == nil {
-			log.Println("Updated token in", tokenFile)
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	if secretName != "" && secretNamespace != "" && clientset != nil {
-		secrets := clientset.CoreV1().Secrets(secretNamespace)
-		_, err := secrets.Get(secretName, metav1.GetOptions{})
-		if err == nil {
-			patch := []patchOperation{
-				patchOperation{
-					Op:    "add",
-					Path:  "/stringData",
-					Value: make(map[string]string),
-				},
-				patchOperation{
-					Op:    "add",
-					Path:  "/stringData/accesstoken",
-					Value: token.AccessToken,
-				},
-				patchOperation{
-					Op:    "add",
-					Path:  "/stringData/refreshtoken",
-					Value: token.RefreshToken,
-				},
-				patchOperation{
-					Op:    "add",
-					Path:  "/stringData/expiry",
-					Value: token.Expiry.Format(time.RFC3339),
-				},
-				patchOperation{
-					Op:    "add",
-					Path:  "/stringData/updated",
-					Value: time.Now().Format(time.RFC3339),
-				},
-			}
-			raw, err := json.Marshal(patch)
-			if err != nil {
-				fmt.Println(err)
-			}
-			fin, err := secrets.Patch(secretName, types.JSONPatchType, raw)
-			if err == nil {
-				log.Printf("Patched secret %s/%s with new token", secretNamespace, secretName)
-			} else {
-				fmt.Println(err)
-				fmt.Println(fin)
-			}
-		} else {
-			fmt.Println(err.Error())
-			createTokenSecret(token, secretNamespace, secretName)
-		}
-	}
-}
-
 func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) {
 	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
 
@@ -213,7 +100,11 @@ func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) 
 			Name: secretNamespace,
 		},
 	})
-	log.Printf("Create namespace: %s: %+v", secretNamespace, err)
+	if err == nil {
+		log.Printf("Created namespace: %s\n", secretNamespace)
+	} else {
+		log.Printf("%+v\n", err)
+	}
 
 	// Create new
 	s := apiv1.Secret{
@@ -224,6 +115,9 @@ func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: secretNamespace,
+			Labels: map[string]string{
+				"dj-kubelet.com/oauth-refresher": "spotify",
+			},
 		},
 		Data: map[string][]byte{
 			"accesstoken":  []byte(token.AccessToken),
@@ -239,7 +133,7 @@ func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) 
 	if err == nil {
 		log.Printf("Created secret %s/%s", secretNamespace, secretName)
 	} else {
-		fmt.Println("ERROR:", err)
+		log.Printf("%+v\n", err)
 	}
 }
 
@@ -326,29 +220,11 @@ func main() {
 		}
 	}()
 
-	// perform initial refresh
-	refresh()
-
-	ticker := time.NewTicker(10 * time.Minute)
-	quit := make(chan bool)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				refresh()
-			case <-quit:
-				ticker.Stop()
-				return
-			}
-		}
-	}()
-
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	<-signalChan
 
 	log.Println("Shutdown signal received, exiting...")
 
-	quit <- true
 	s.Shutdown(context.Background())
 }
