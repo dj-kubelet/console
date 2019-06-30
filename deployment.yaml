@@ -22,7 +22,7 @@ spec:
         fsGroup: 65535
 
       containers:
-      - image: spotify-oauther:latest
+      - image: djkubelet/spotify-oauther:latest
         name: spotify-oauther
         imagePullPolicy: IfNotPresent
         args:

@@ -14,11 +14,14 @@ kubectl -n oauther create secret tls server-tls --cert=./server.pem --key=./serv
 kubectl apply -f ./rbac.yaml
 kubectl -n oauther apply -f deployment.yaml
 
-docker build -t spotify-oauther .
+# Optional: Attach to the minikube docker daemon to get the image into it.
+# eval $(minikube docker-env)
+
+docker build -t djkubelet/spotify-oauther .
 
 # Load the image into your kubernetes environment.
 # If using minikube attach to it's docker daemon before building.
-kind load docker-image spotify-oauther
+kind load docker-image djkubelet/spotify-oauther
 
 kubectl get pods -n oauther
 kubectl -n oauther port-forward $(kubectl -n oauther get pods -oname) 8443:8443
