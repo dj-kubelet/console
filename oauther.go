@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/spotify"
 
@@ -27,13 +29,14 @@ import (
 var (
 	ctx        context.Context
 	conf       *oauth2.Config
-	state      string
 	baseURL    string
 	port       string
 	tls        bool
 	certFile   string
 	keyFile    string
 	secretName string
+	key        = []byte("super-secret-key")
+	store      = sessions.NewCookieStore(key)
 )
 
 var clientset *kubernetes.Clientset
@@ -165,9 +168,12 @@ func getSpotifyUsername(token *oauth2.Token) (string, error) {
 func main() {
 	setup()
 
-	state = uuid.New().String()
-	log.Println("State:", state)
 	http.HandleFunc("/auth", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := store.Get(r, "user")
+		state := uuid.New().String()
+		session.Values["oauth-state"] = state
+		session.Save(r, w)
+
 		url := conf.AuthCodeURL(state, oauth2.SetAuthURLParam("show_dialog", "true"))
 		http.Redirect(w, r, url, 302)
 	})
@@ -177,15 +183,24 @@ func main() {
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		authURL := baseURL + "/auth"
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "Hello world, go to: <a href=\"%s\">%s</a>", authURL, authURL)
+		session, _ := store.Get(r, "user")
+		username := session.Values["username"]
+		if username != nil {
+			fmt.Fprintf(w, "Welcome, %s!", username)
+			// TODO Verify namespace created
+		} else {
+			authURL := baseURL + "/auth"
+			fmt.Fprintf(w, "Hello world, go to: <a href=\"%s\">%s</a>", authURL, authURL)
+		}
 	})
 
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		u := r.URL
-		if state != u.Query().Get("state") {
-			log.Fatal("Invalid state")
+		session, _ := store.Get(r, "user")
+		if session.Values["oauth-state"] != u.Query().Get("state") {
+			log.Println("Invalid state")
+			return
 		}
 		token, err := conf.Exchange(ctx, u.Query().Get("code"))
 		if err != nil {
@@ -198,7 +213,11 @@ func main() {
 		}
 
 		go createTokenSecret(token, username, secretName)
-		fmt.Fprintf(w, fmt.Sprintf("Welcome, %s!", username))
+
+		session.Values["username"] = username
+		session.Save(r, w)
+
+		http.Redirect(w, r, baseURL, 302)
 	})
 
 	s := http.Server{

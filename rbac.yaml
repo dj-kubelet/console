@@ -9,7 +9,7 @@ metadata:
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: oauth-refresher
+  name: oauther
   namespace: default
 rules:
 - apiGroups:
@@ -24,7 +24,7 @@ rules:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: oauth-refresher
+  name: oauther
 rules:
 - apiGroups:
   - ""
@@ -80,5 +80,5 @@ subjects:
   namespace: oauther
 roleRef:
   kind: ClusterRole
-  name: oauth-refresher
+  name: oauther
   apiGroup: rbac.authorization.k8s.io
