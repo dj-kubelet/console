@@ -50,7 +50,7 @@ spec:
           readOnlyRootFilesystem: true
         livenessProbe:
           httpGet:
-            path: /healthz
+            path: /health
             port: 8443
             scheme: HTTPS
           initialDelaySeconds: 30
