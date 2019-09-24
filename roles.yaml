@@ -1,0 +1,44 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dj-kubelet:user-global
+rules:
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - selfsubjectaccessreviews
+  - selfsubjectrulesreviews
+  verbs:
+  - create
+
+- nonResourceURLs:
+  - /healthz
+  - /version
+  - /version/
+  verbs:
+  - get
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dj-kubelet:user
+
+rules:
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+
+- apiGroups: ["dj-kubelet.com"]
+  resources:
+  - tracks
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete

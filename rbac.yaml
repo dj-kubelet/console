@@ -52,6 +52,23 @@ rules:
   resourceNames:
   - spotify-oauth
 
+- apiGroups:
+  - ""
+  resources:
+  - ServiceAccount
+  verbs:
+  - create
+  - list
+  - get
+
+- apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources:
+  - ClusterRoleBinding
+  - RoleBinding
+  verbs:
+  - create
+
 ---
 
 kind: RoleBinding

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"golang.org/x/oauth2/spotify"
 
 	apiv1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -90,6 +92,44 @@ func setup() {
 	clientset = kubernetes.NewForConfigOrDie(config)
 }
 
+func getKubeconfig(spotifyUsername string, apiserver string) string {
+	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
+	sa, err := clientset.CoreV1().ServiceAccounts(secretNamespace).Get(spotifyUsername, metav1.GetOptions{})
+	if err == nil {
+		log.Printf("Got serviceaccount: %s\n", sa.ObjectMeta.Name)
+		log.Printf("sa secret: %s\n", sa.Secrets[0].Name)
+	} else {
+		log.Printf("%+v\n", err)
+	}
+	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(sa.Secrets[0].Name, metav1.GetOptions{})
+	if err == nil {
+		kc := `apiVersion: v1
+clusters:
+- cluster:
+    server: %s
+    certificate-authority-data: %s
+  name: dj-kubelet
+contexts:
+- context:
+    cluster: dj-kubelet
+    namespace: %s
+    user: user
+  name: user@dj-kubelet
+current-context: user@dj-kubelet
+kind: Config
+preferences: {}
+users:
+- name: user
+  user:
+    token: %s
+`
+		return fmt.Sprintf(kc, apiserver, base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]), secretNamespace, secret.Data["token"])
+	} else {
+		log.Printf("%+v\n", err)
+	}
+	return "NO Kubeconfig"
+}
+
 func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) {
 	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
 
@@ -109,7 +149,75 @@ func createTokenSecret(token *oauth2.Token, spotifyUsername, secretName string) 
 		log.Printf("%+v\n", err)
 	}
 
-	// Create new
+	// Create ServiceAccount
+	_, err = clientset.CoreV1().ServiceAccounts(secretNamespace).Create(&apiv1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: spotifyUsername,
+		},
+	})
+	if err == nil {
+		log.Printf("Created serviceaccount: %s\n", secretNamespace)
+	} else {
+		log.Printf("%+v\n", err)
+	}
+
+	// Create ClusterRoleBinding
+	_, err = clientset.RbacV1().ClusterRoleBindings().Create(&rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ClusterRoleBinding",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-kubelet:" + spotifyUsername,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "dj-kubelet:user-global",
+		},
+		Subjects: []rbacv1.Subject{rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      "matti4s",
+			Namespace: secretNamespace,
+		}},
+	})
+	if err == nil {
+		log.Printf("Created clusterrolebinding: %s\n", "dj-kubelet:"+spotifyUsername)
+	} else {
+		log.Printf("%+v\n", err)
+	}
+
+	// Create RoleBinding
+	_, err = clientset.RbacV1().RoleBindings(secretNamespace).Create(&rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "RoleBinding",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-kubelet:" + spotifyUsername,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "dj-kubelet:user",
+		},
+		Subjects: []rbacv1.Subject{rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      "matti4s",
+			Namespace: secretNamespace,
+		}},
+	})
+	if err == nil {
+		log.Printf("Created rolebinding: %s\n", "dj-kubelet:"+spotifyUsername)
+	} else {
+		log.Printf("%+v\n", err)
+	}
+
+	// Create new oauth secret
 	s := apiv1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -187,7 +295,9 @@ func main() {
 		session, _ := store.Get(r, "user")
 		username := session.Values["username"]
 		if username != nil {
-			fmt.Fprintf(w, "Welcome, %s!", username)
+			fmt.Fprintf(w, "<p>Welcome, %s!</p>", username)
+			kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
+			fmt.Fprintf(w, `<textarea cols="80" rows="20" style="white-space: pre; width">%s</textarea>`, kubeconfig)
 			// TODO Verify namespace created
 		} else {
 			authURL := baseURL + "/auth"
