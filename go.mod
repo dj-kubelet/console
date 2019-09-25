@@ -1,4 +1,4 @@
-module console
+module github.com/dj-kubelet/console
 
 go 1.13
 
