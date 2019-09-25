@@ -1,4 +1,4 @@
-module oauther
+module console
 
 go 1.13
 

@@ -2,19 +2,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: oauther
-  name: oauther
+    app: console
+  name: console
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: oauther
+      app: console
   template:
     metadata:
       labels:
-        app: oauther
+        app: console
     spec:
-      serviceAccountName: oauther
+      serviceAccountName: console
       securityContext:
         runAsNonRoot: true
         runAsUser: 65535
@@ -22,8 +22,8 @@ spec:
         fsGroup: 65535
 
       containers:
-      - image: djkubelet/spotify-oauther:latest
-        name: spotify-oauther
+      - image: djkubelet/console:latest
+        name: console
         imagePullPolicy: IfNotPresent
         args:
         - --tls=true
@@ -36,12 +36,12 @@ spec:
         - name: CLIENT_ID
           valueFrom:
             secretKeyRef:
-              name: oauther
+              name: console
               key: CLIENT_ID
         - name: CLIENT_SECRET
           valueFrom:
             secretKeyRef:
-              name: oauther
+              name: console
               key: CLIENT_SECRET
         volumeMounts:
         - name: server-tls

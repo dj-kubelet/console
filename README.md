@@ -1,30 +1,26 @@
-# Spotify oauther
+# dj-kubelet Console
 
-Runs a web server that will act as your oauth client. An access token is
-written to file or to a kubernetes secret. The token will be refreshed before
-expiring.
+The dj-kubelet console is what users interact with and log in to create their dj-kubelet namespaces.
 
 ```bash
-kubectl create namespace oauther
-kubectl -n oauther apply -f ./secret.yaml
+kubectl create namespace console
+kubectl -n console apply -f ./secret.yaml
 
 cfssl selfsign localhost <(cfssl print-defaults csr) | cfssljson -bare server
-kubectl -n oauther create secret tls server-tls --cert=./server.pem --key=./server-key.pem
+kubectl -n console create secret tls server-tls --cert=./server.pem --key=./server-key.pem
 
 kubectl apply -f ./rbac.yaml
-kubectl -n oauther apply -f deployment.yaml
+kubectl apply -f ./roles.yaml
+kubectl -n console apply -f ./deployment.yaml
 
-# Optional: Attach to the minikube docker daemon to get the image into it.
+# If using minikube: Attach to the minikube docker daemon before building.
 # eval $(minikube docker-env)
 
-docker build -t djkubelet/spotify-oauther .
+docker build -t djkubelet/console .
 
-# Load the image into your kubernetes environment.
-# If using minikube attach to it's docker daemon before building.
-kind load docker-image djkubelet/spotify-oauther
+# If using kind: Load the build image into kind after building.
+# kind load docker-image djkubelet/console
 
-kubectl get pods -n oauther
-kubectl -n oauther port-forward $(kubectl -n oauther get pods -oname) 8443:8443
+kubectl get pods -n console
+kubectl -n console port-forward $(kubectl -n console get pods -oname) 8443:8443
 ```
-
-Authenticate to the oauther by visiting https://localhost:8443/auth
