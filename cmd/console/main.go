@@ -273,61 +273,66 @@ func getSpotifyUsername(token *oauth2.Token) (string, error) {
 	return me.ID, nil
 }
 
+func loginSpotify(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user")
+	state := uuid.New().String()
+	session.Values["spotify-oauth-state"] = state
+	session.Save(r, w)
+
+	url := conf.AuthCodeURL(state, oauth2.SetAuthURLParam("show_dialog", "true"))
+	http.Redirect(w, r, url, 302)
+}
+
+func health(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "ok")
+}
+
+func index(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	session, _ := store.Get(r, "user")
+	username := session.Values["username"]
+	if username != nil {
+		// TODO Verify namespace created
+		kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
+		fmt.Fprintf(w, `<p>Nice to have you here %s! Let's rock and roll!</p><textarea cols="80" rows="20" style="white-space: pre; width">%s</textarea>`, username, kubeconfig)
+	} else {
+		authURL := baseURL + "/login/spotify"
+		fmt.Fprintf(w, "<p>Hello there. This is dj-kubelet.</p><p><a href=\"%s\">Log in with Spotify</a></p>", authURL)
+	}
+}
+
+func callback(w http.ResponseWriter, r *http.Request) {
+	u := r.URL
+	session, _ := store.Get(r, "user")
+	if session.Values["spotify-oauth-state"] != u.Query().Get("state") {
+		log.Println("Invalid state")
+		return
+	}
+	token, err := conf.Exchange(ctx, u.Query().Get("code"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	username, err := getSpotifyUsername(token)
+	if err != nil {
+		log.Printf("failed to load username: %+v", err)
+	}
+
+	go createTokenSecret(token, username, secretName)
+
+	session.Values["username"] = username
+	session.Save(r, w)
+
+	http.Redirect(w, r, baseURL, 302)
+}
+
 func main() {
 	setup()
 
-	http.HandleFunc("/login/spotify", func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "user")
-		state := uuid.New().String()
-		session.Values["spotify-oauth-state"] = state
-		session.Save(r, w)
-
-		url := conf.AuthCodeURL(state, oauth2.SetAuthURLParam("show_dialog", "true"))
-		http.Redirect(w, r, url, 302)
-	})
-
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "ok")
-	})
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		session, _ := store.Get(r, "user")
-		username := session.Values["username"]
-		if username != nil {
-			// TODO Verify namespace created
-			kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
-			fmt.Fprintf(w, `<p>Nice to have you here %s! Let's rock and roll!</p><textarea cols="80" rows="20" style="white-space: pre; width">%s</textarea>`, username, kubeconfig)
-		} else {
-			authURL := baseURL + "/login/spotify"
-			fmt.Fprintf(w, "<p>Hello there. This is dj-kubelet.</p><p><a href=\"%s\">Log in with Spotify</a></p>", authURL)
-		}
-	})
-
-	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		u := r.URL
-		session, _ := store.Get(r, "user")
-		if session.Values["spotify-oauth-state"] != u.Query().Get("state") {
-			log.Println("Invalid state")
-			return
-		}
-		token, err := conf.Exchange(ctx, u.Query().Get("code"))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		username, err := getSpotifyUsername(token)
-		if err != nil {
-			log.Printf("failed to load username: %+v", err)
-		}
-
-		go createTokenSecret(token, username, secretName)
-
-		session.Values["username"] = username
-		session.Save(r, w)
-
-		http.Redirect(w, r, baseURL, 302)
-	})
+	http.HandleFunc("/", index)
+	http.HandleFunc("/health", health)
+	http.HandleFunc("/login/spotify", loginSpotify)
+	http.HandleFunc("/callback", callback)
 
 	s := http.Server{
 		Addr: port,
