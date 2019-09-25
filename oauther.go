@@ -276,10 +276,10 @@ func getSpotifyUsername(token *oauth2.Token) (string, error) {
 func main() {
 	setup()
 
-	http.HandleFunc("/auth", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/login/spotify", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "user")
 		state := uuid.New().String()
-		session.Values["oauth-state"] = state
+		session.Values["spotify-oauth-state"] = state
 		session.Save(r, w)
 
 		url := conf.AuthCodeURL(state, oauth2.SetAuthURLParam("show_dialog", "true"))
@@ -295,20 +295,19 @@ func main() {
 		session, _ := store.Get(r, "user")
 		username := session.Values["username"]
 		if username != nil {
-			fmt.Fprintf(w, "<p>Welcome, %s!</p>", username)
-			kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
-			fmt.Fprintf(w, `<textarea cols="80" rows="20" style="white-space: pre; width">%s</textarea>`, kubeconfig)
 			// TODO Verify namespace created
+			kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
+			fmt.Fprintf(w, `<p>Nice to have you here %s! Let's rock and roll!</p><textarea cols="80" rows="20" style="white-space: pre; width">%s</textarea>`, username, kubeconfig)
 		} else {
-			authURL := baseURL + "/auth"
-			fmt.Fprintf(w, "Hello world, go to: <a href=\"%s\">%s</a>", authURL, authURL)
+			authURL := baseURL + "/login/spotify"
+			fmt.Fprintf(w, "<p>Hello there. This is dj-kubelet.</p><p><a href=\"%s\">Log in with Spotify</a></p>", authURL)
 		}
 	})
 
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		u := r.URL
 		session, _ := store.Get(r, "user")
-		if session.Values["oauth-state"] != u.Query().Get("state") {
+		if session.Values["spotify-oauth-state"] != u.Query().Get("state") {
 			log.Println("Invalid state")
 			return
 		}
