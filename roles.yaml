@@ -26,13 +26,6 @@ metadata:
   name: dj-kubelet:user
 
 rules:
-- apiGroups: [""]
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-
 - apiGroups: ["dj-kubelet.com"]
   resources:
   - tracks

@@ -70,6 +70,16 @@ rules:
   verbs:
   - create
 
+- apiGroups: ["dj-kubelet.com"]
+  resources:
+  - tracks
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+
 ---
 
 kind: RoleBinding
