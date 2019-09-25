@@ -40,6 +40,7 @@ rules:
   - secrets
   verbs:
   - create
+  - get
 
 - apiGroups:
   - ""
@@ -55,7 +56,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - ServiceAccount
+  - serviceaccounts
   verbs:
   - create
   - list
@@ -64,8 +65,8 @@ rules:
 - apiGroups:
   - "rbac.authorization.k8s.io"
   resources:
-  - ClusterRoleBinding
-  - RoleBinding
+  - clusterrolebindings
+  - rolebindings
   verbs:
   - create
 
