@@ -25,8 +25,9 @@ spec:
       - image: djkubelet/console:latest
         name: console
         imagePullPolicy: IfNotPresent
+        command:
+        - /console
         args:
-        - --tls=true
         - --port=:8443
         - --base-url=https://localhost:8443
         - --cert-file=/etc/tls/tls.crt

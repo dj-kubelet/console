@@ -1,0 +1,61 @@
+* {
+  padding: 0;
+  margin: 0;
+}
+
+@font-face {
+  font-family: 'ChiKareGo';
+  src: url('ChiKareGo.ttf');
+}
+
+body {
+  font-family: 'ChiKareGo', 'Arial', sans-serif;
+  background-color: #181818;
+  color: #d8d8d8;
+}
+
+.window {
+	margin-left:auto;
+	margin-right:auto;
+  margin-top: 4em;
+  width:80em;
+
+  border: 2px solid #d8d8d8;
+  border-radius: 5px;
+}
+
+.window p {
+  font-size: 200%;
+}
+
+.window-bar {
+  background: #d8d8d8;
+  color: #181818;
+
+  padding-top: 0.1em;
+  padding-left: 1em;
+}
+
+.window-content p {
+  margin:1em;
+}
+
+.code {
+  white-space: pre;
+  margin:1em;
+  padding: 1em;
+  width:30em;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: scroll;
+  border: 2px solid #d8d8d8;
+  border-radius: 5px;
+}
+
+textarea {
+  resize: none;
+  outline: none;
+  border: 2px solid #d8d8d8;
+  background-color: #181818;
+  color: #d8d8d8;
+}
