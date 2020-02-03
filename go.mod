@@ -3,12 +3,12 @@ module github.com/dj-kubelet/console
 go 1.13
 
 require (
-	github.com/google/uuid v1.0.0
+	github.com/google/uuid v1.1.1
 	github.com/gorilla/sessions v1.2.0
-	github.com/labstack/echo-contrib v0.6.0
-	github.com/labstack/echo/v4 v4.1.10
-	golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a
-	k8s.io/api v0.0.0-20190819141258-3544db3b9e44
-	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d
-	k8s.io/client-go v0.0.0-20190819141724-e14f31a72a77
+	github.com/labstack/echo-contrib v0.8.0
+	github.com/labstack/echo/v4 v4.1.14
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	k8s.io/api v0.17.0
+	k8s.io/apimachinery v0.17.0
+	k8s.io/client-go v0.17.0
 )
