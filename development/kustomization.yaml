@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../base
+
+namespace: console
+
+images:
+  - name: djkubelet/console
+    newTag: latest
+    newName: console
+
+secretGenerator:
+- name: console
+  # env is a path to a file to read lines of key=val
+  # you can only specify one env file per secret.
+  env: envfile
+  behavior: merge
+  type: Opaque
+
+- name: server-tls
+  type: "kubernetes.io/tls"
+  files:
+    - tls.crt=server.pem
+    - tls.key=server-key.pem
