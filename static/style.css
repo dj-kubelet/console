@@ -7,21 +7,27 @@
   font-family: 'ChiKareGo';
   src: url('ChiKareGo.ttf');
 }
+@font-face {
+  font-family: 'Perfect_DOS_VGA_437';
+  src: url('Perfect_DOS_VGA_437.ttf');
+}
 
 body {
-  font-family: 'ChiKareGo', 'Arial', sans-serif;
-  background-color: #181818;
+  font-family: 'Perfect_DOS_VGA_437', 'Arial', sans-serif;
+  background-color: #048284;
   color: #d8d8d8;
 }
 
 .window {
-	margin-left:auto;
-	margin-right:auto;
+  margin-left:auto;
+  margin-right:auto;
   margin-top: 4em;
   width:80em;
+  min-height: 40em;
 
   border: 2px solid #d8d8d8;
   border-radius: 5px;
+  background-color: #181818;
 }
 
 .window p {
@@ -29,11 +35,12 @@ body {
 }
 
 .window-bar {
+  font-family: 'ChiKareGo', 'Arial', sans-serif;
   background: #d8d8d8;
   color: #181818;
 
   padding-top: 0.1em;
-  padding-left: 1em;
+  text-align: center;
 }
 
 .window-content p {

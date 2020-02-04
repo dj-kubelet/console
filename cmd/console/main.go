@@ -29,7 +29,6 @@ import (
 )
 
 var (
-	conf       *oauth2.Config
 	baseURL    string
 	port       string
 	certFile   string
@@ -245,10 +244,10 @@ func index(c echo.Context) error {
 	username := sess.Values["username"]
 	if username != nil {
 		// TODO Verify namespace created
+		// TODO Pick real apiserver endpoint
 		kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
 		content := template.HTML(fmt.Sprintf(`
-<p>Nice to have you here %s!</p>
-<p>Let's rock and roll!</p>
+<p>Nice to have you here %s!<br>Let's rock and roll!</p>
 <textarea id="kubeconfig" cols=80 rows=20 spellcheck="false" class="code">%s</textarea>
 <button type="button" onclick="selectAndCopyKubeconfig()">Copy Kubeconfig</button>
 `, username, kubeconfig))
@@ -256,8 +255,7 @@ func index(c echo.Context) error {
 	} else {
 		loginURL := "/login/spotify"
 		content := template.HTML(fmt.Sprintf(`
-<p>Hello there. This is dj-kubelet.</p>
-<p><a href="%s">Log in with Spotify</a></p>
+<p>Hello there. This is dj-kubelet.<br><a href="%s">Log in with Spotify</a></p>
 `, loginURL))
 		return c.Render(http.StatusOK, "index.html", content)
 	}

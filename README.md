@@ -12,6 +12,6 @@ cfssl selfsign localhost <(cfssl print-defaults csr) | cfssljson -bare developme
 
 kubectl apply -k ./development
 
-kubectl get pods -n console
-kubectl -n console port-forward $(kubectl -n console get pods -oname) 8443:8443
+kubectl -n console get pods
+kubectl -n console port-forward deployment/console 8443:8443
 ```
