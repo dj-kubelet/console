@@ -4,8 +4,6 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
-	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +11,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -29,13 +28,17 @@ import (
 )
 
 var (
-	baseURL    string
-	port       string
-	certFile   string
-	keyFile    string
-	secretName string
-	key        = []byte("super-secret-key")
-	sauther    auth.Auther
+	baseURL           string
+	port              string
+	certFile          string
+	keyFile           string
+	secretName        string
+	apiserverEndpoint string
+	sauther           auth.Auther
+	// Validate to be 32 or 64 bytes
+	cookieStoreAuthKey string
+	// Validate to be 32 bytes
+	cookieStoreEncryptionKey string
 )
 
 var clientset *kubernetes.Clientset
@@ -46,6 +49,7 @@ func setup() {
 	flag.StringVar(&certFile, "cert-file", "tls.crt", "")
 	flag.StringVar(&keyFile, "key-file", "tls.key", "")
 	flag.StringVar(&secretName, "secret-name", "spotify-oauth", "")
+	flag.StringVar(&apiserverEndpoint, "apiserver-endpoint", "https://localhost:6443", "")
 	flag.Parse()
 
 	clientID, ok := os.LookupEnv("CLIENT_ID")
@@ -55,6 +59,22 @@ func setup() {
 	clientSecret, ok := os.LookupEnv("CLIENT_SECRET")
 	if !ok {
 		log.Fatalln("env CLIENT_SECRET not set")
+	}
+	cookieStoreAuthKey, ok = os.LookupEnv("COOKIE_STORE_AUTH_KEY")
+	if ok {
+		if len(cookieStoreAuthKey) != 32 {
+			log.Fatalln("COOKIE_STORE_AUTH_KEY is not 32 bytes")
+		}
+	} else {
+		log.Fatalln("env COOKIE_STORE_AUTH_KEY not set")
+	}
+	cookieStoreEncryptionKey, ok = os.LookupEnv("COOKIE_STORE_ENCRYPTION_KEY")
+	if ok {
+		if len(cookieStoreEncryptionKey) != 32 {
+			log.Fatalln("COOKIE_STORE_ENCRYPTION_KEY is not 32 bytes")
+		}
+	} else {
+		log.Fatalln("env COOKIE_STORE_ENCRYPTION_KEY not set")
 	}
 
 	sauther = auth.New(clientID, clientSecret, baseURL+"/callback")
@@ -87,12 +107,18 @@ func getKubeconfig(spotifyUsername string, apiserver string) string {
 	}
 	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(sa.Secrets[0].Name, metav1.GetOptions{})
 	if err == nil {
-		kc := `apiVersion: v1
+		kc := `kind: Config
+apiVersion: v1
+preferences: {}
 clusters:
 - cluster:
     server: %s
     certificate-authority-data: %s
   name: dj-kubelet
+users:
+- name: user
+  user:
+    token: %s
 contexts:
 - context:
     cluster: dj-kubelet
@@ -100,14 +126,8 @@ contexts:
     user: user
   name: user@dj-kubelet
 current-context: user@dj-kubelet
-kind: Config
-preferences: {}
-users:
-- name: user
-  user:
-    token: %s
 `
-		return fmt.Sprintf(kc, apiserver, base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]), secretNamespace, secret.Data["token"])
+		return fmt.Sprintf(kc, apiserver, base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]), secret.Data["token"], secretNamespace)
 	} else {
 		log.Printf("%+v\n", err)
 	}
@@ -239,66 +259,73 @@ func health(c echo.Context) error {
 	return c.String(http.StatusOK, "ok")
 }
 
-func index(c echo.Context) error {
+type User struct {
+	Name       string `json:"name"`
+	Kubeconfig string `json:"kubeconfig"`
+}
+
+type ErrorResponse struct {
+	Status string `json:"status"`
+	Error  bool   `json:"error"`
+}
+
+func user(c echo.Context) error {
 	sess, _ := session.Get("session", c)
 	username := sess.Values["username"]
-	if username != nil {
-		// TODO Verify namespace created
-		// TODO Pick real apiserver endpoint
-		kubeconfig := getKubeconfig(username.(string), "https://localhost:44091")
-		content := template.HTML(fmt.Sprintf(`
-<p>Nice to have you here %s!<br>Let's rock and roll!</p>
-<textarea id="kubeconfig" cols=80 rows=20 spellcheck="false" class="code">%s</textarea>
-<button type="button" onclick="selectAndCopyKubeconfig()">Copy Kubeconfig</button>
-`, username, kubeconfig))
-		return c.Render(http.StatusOK, "index.html", content)
-	} else {
-		loginURL := "/login/spotify"
-		content := template.HTML(fmt.Sprintf(`
-<p>Hello there. This is dj-kubelet.<br><a href="%s">Log in with Spotify</a></p>
-`, loginURL))
-		return c.Render(http.StatusOK, "index.html", content)
+	if username == nil {
+		return c.JSON(http.StatusUnauthorized, &ErrorResponse{
+			Error:  true,
+			Status: http.StatusText(http.StatusUnauthorized),
+		})
 	}
+
+	// TODO Verify namespace created
+	kubeconfig := getKubeconfig(username.(string), apiserverEndpoint)
+	u := &User{
+		Name:       username.(string),
+		Kubeconfig: kubeconfig,
+	}
+	return c.JSON(http.StatusOK, u)
 }
 
 func callback(c echo.Context) error {
 	username, token, err := sauther.Callback(c)
 	if err != nil {
-		log.Printf("failed to load username: %+v", err)
+		log.Panic(err)
+		c.Error(err)
 	}
 
-	go func() {
-		ns := createNamespace(token, username)
-		createTokenSecret(token, ns, secretName)
-	}()
+	//go func() {
+	//}()
+	ns := createNamespace(token, username)
+	createTokenSecret(token, ns, secretName)
 
-	return c.Redirect(http.StatusTemporaryRedirect, baseURL)
-}
-
-type Template struct {
-	templates *template.Template
-}
-
-func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
+	return c.Redirect(http.StatusTemporaryRedirect, baseURL+"/#!authed")
 }
 
 func main() {
 	setup()
 
 	e := echo.New()
-	t := &Template{
-		templates: template.Must(template.ParseGlob("templates/*.html")),
-	}
-	e.Renderer = t
 
-	e.Use(session.Middleware(sessions.NewCookieStore(key)))
+	cookieStore := &sessions.CookieStore{
+		Codecs: securecookie.CodecsFromPairs([]byte(cookieStoreAuthKey), []byte(cookieStoreEncryptionKey)),
+		Options: &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 1,
+			Secure:   true,
+			HttpOnly: true,
+		},
+	}
+	cookieStore.MaxAge(cookieStore.Options.MaxAge)
+
+	e.Use(session.Middleware(cookieStore))
 	e.Use(middleware.Logger())
 	//e.Use(middleware.Recover())
 
 	e.Static("/static", "static")
-
-	e.GET("/", index)
+	e.File("/", "index.html")
+	e.GET("/user", user)
 	e.GET("/health", health)
 	e.GET("/login/spotify", sauther.Auth)
 	e.GET("/callback", callback)

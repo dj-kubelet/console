@@ -44,6 +44,16 @@ spec:
             secretKeyRef:
               name: console
               key: CLIENT_SECRET
+        - name: COOKIE_STORE_AUTH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: console
+              key: COOKIE_STORE_AUTH_KEY
+        - name: COOKIE_STORE_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: console
+              key: COOKIE_STORE_ENCRYPTION_KEY
         volumeMounts:
         - name: server-tls
           mountPath: "/etc/tls"

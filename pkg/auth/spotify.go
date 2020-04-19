@@ -51,14 +51,13 @@ func New(clientID string, clientSecret string, callbackURL string) *auther {
 
 func (a auther) Auth(c echo.Context) error {
 	sess, _ := session.Get("session", c)
-	//sess.Options = &sessions.Options{
-	//	Path:     "/",
-	//	MaxAge:   86400 * 7,
-	//	HttpOnly: true,
-	//}
 	state := uuid.New().String()
 	sess.Values["spotify-oauth-state"] = state
-	sess.Save(c.Request(), c.Response())
+	err := sess.Save(c.Request(), c.Response())
+	if err != nil {
+		log.Fatal(err)
+		c.Error(err)
+	}
 
 	url := a.conf.AuthCodeURL(state, oauth2.SetAuthURLParam("show_dialog", "true"))
 	return c.Redirect(http.StatusTemporaryRedirect, url)
