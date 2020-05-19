@@ -324,7 +324,7 @@ func main() {
 	//e.Use(middleware.Recover())
 
 	e.Static("/static", "static")
-	e.File("/", "index.html")
+	e.File("/", "static/index.html")
 	e.GET("/user", user)
 	e.GET("/health", health)
 	e.GET("/login/spotify", sauther.Auth)
