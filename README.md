@@ -15,3 +15,9 @@ kubectl apply -k ./development
 kubectl -n console get pods
 kubectl -n console port-forward deployment/console 8443:8443
 ```
+
+## Credit
+Huge props to:
+- https://github.com/botoxparty/XP.css
+- https://github.com/jdan/98.css
+- https://github.com/vuejs/vue
