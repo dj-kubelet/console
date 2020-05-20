@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -94,7 +95,7 @@ func setup() {
 
 func getKubeconfig(spotifyUsername string, apiserver string) string {
 	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
-	sa, err := clientset.CoreV1().ServiceAccounts(secretNamespace).Get(spotifyUsername, metav1.GetOptions{})
+	sa, err := clientset.CoreV1().ServiceAccounts(secretNamespace).Get(context.TODO(), spotifyUsername, metav1.GetOptions{})
 	if err == nil {
 		log.Printf("Got serviceaccount: %s\n", sa.ObjectMeta.Name)
 		if len(sa.Secrets) == 0 {
@@ -105,7 +106,7 @@ func getKubeconfig(spotifyUsername string, apiserver string) string {
 	} else {
 		log.Printf("%+v\n", err)
 	}
-	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(sa.Secrets[0].Name, metav1.GetOptions{})
+	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(context.TODO(), sa.Secrets[0].Name, metav1.GetOptions{})
 	if err == nil {
 		kc := `kind: Config
 apiVersion: v1
@@ -138,7 +139,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
 
 	// Create the namespace if it doesn't exist
-	_, err := clientset.CoreV1().Namespaces().Create(&apiv1.Namespace{
+	_, err := clientset.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Namespace",
 			APIVersion: "v1",
@@ -146,7 +147,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: secretNamespace,
 		},
-	})
+	}, metav1.CreateOptions{})
 	if err == nil {
 		log.Printf("Created namespace: %s\n", secretNamespace)
 	} else {
@@ -154,7 +155,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	}
 
 	// Create ServiceAccount
-	_, err = clientset.CoreV1().ServiceAccounts(secretNamespace).Create(&apiv1.ServiceAccount{
+	_, err = clientset.CoreV1().ServiceAccounts(secretNamespace).Create(context.TODO(), &apiv1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
@@ -162,7 +163,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: spotifyUsername,
 		},
-	})
+	}, metav1.CreateOptions{})
 	if err == nil {
 		log.Printf("Created serviceaccount: %s\n", secretNamespace)
 	} else {
@@ -170,7 +171,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	}
 
 	// Create ClusterRoleBinding
-	_, err = clientset.RbacV1().ClusterRoleBindings().Create(&rbacv1.ClusterRoleBinding{
+	_, err = clientset.RbacV1().ClusterRoleBindings().Create(context.TODO(), &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterRoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -188,7 +189,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 			Name:      "matti4s",
 			Namespace: secretNamespace,
 		}},
-	})
+	}, metav1.CreateOptions{})
 	if err == nil {
 		log.Printf("Created clusterrolebinding: %s\n", "dj-kubelet:"+spotifyUsername)
 	} else {
@@ -196,7 +197,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	}
 
 	// Create RoleBinding
-	_, err = clientset.RbacV1().RoleBindings(secretNamespace).Create(&rbacv1.RoleBinding{
+	_, err = clientset.RbacV1().RoleBindings(secretNamespace).Create(context.TODO(), &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -214,7 +215,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 			Name:      "matti4s",
 			Namespace: secretNamespace,
 		}},
-	})
+	}, metav1.CreateOptions{})
 	if err == nil {
 		log.Printf("Created rolebinding: %s\n", "dj-kubelet:"+spotifyUsername)
 	} else {
@@ -247,7 +248,7 @@ func createTokenSecret(token *oauth2.Token, secretNamespace, secretName string) 
 	}
 
 	secrets := clientset.CoreV1().Secrets(secretNamespace)
-	_, err := secrets.Create(&s)
+	_, err := secrets.Create(context.TODO(), &s, metav1.CreateOptions{})
 	if err == nil {
 		log.Printf("Created secret %s/%s", secretNamespace, secretName)
 	} else {
