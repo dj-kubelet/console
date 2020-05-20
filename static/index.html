@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="shortcut icon" href="static/dj-kubelet.png">
     <link rel="stylesheet" href="https://unpkg.com/xp.css@0.2.2/dist/98.css">
-    <link rel="stylesheet" href="static/style2.css" type="text/css">
+    <link rel="stylesheet" href="static/style.css" type="text/css">
     <script src="https://unpkg.com/vue"></script>
   </head>
   <body>
@@ -15,7 +15,7 @@
       <div class="title-bar">
         <div class="title-bar-text">dj-kubelet.exe</div>
         <div class="title-bar-controls">
-          <button aria-label="Close"></button>
+          <button aria-label="Close" v-on:click="logout"></button>
         </div>
       </div>
       <template v-if="authed">

@@ -262,6 +262,7 @@ func health(c echo.Context) error {
 type User struct {
 	Name       string `json:"name"`
 	Kubeconfig string `json:"kubeconfig"`
+	Error      bool   `json:"error"`
 }
 
 type ErrorResponse struct {
@@ -284,6 +285,7 @@ func user(c echo.Context) error {
 	u := &User{
 		Name:       username.(string),
 		Kubeconfig: kubeconfig,
+		Error:      false,
 	}
 	return c.JSON(http.StatusOK, u)
 }
@@ -301,6 +303,16 @@ func callback(c echo.Context) error {
 	createTokenSecret(token, ns, secretName)
 
 	return c.Redirect(http.StatusTemporaryRedirect, baseURL+"/#!authed")
+}
+
+func logout(c echo.Context) error {
+	sess, _ := session.Get("session", c)
+	sess.Options.MaxAge = -1
+	err := sess.Save(c.Request(), c.Response())
+	if err != nil {
+		log.Fatal("failed to delete session", err)
+	}
+	return c.JSONBlob(http.StatusOK, []byte("{\"ok\": true}"))
 }
 
 func main() {
@@ -329,6 +341,7 @@ func main() {
 	e.GET("/health", health)
 	e.GET("/login/spotify", sauther.Auth)
 	e.GET("/callback", callback)
+	e.GET("/logout", logout)
 
 	e.Logger.Fatal(e.StartTLS(port, certFile, keyFile))
 }

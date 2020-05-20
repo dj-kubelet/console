@@ -8,6 +8,15 @@ var app = new Vue({
         login: function() {
             window.location.href = "/login/spotify";
         },
+        logout: function() {
+          fetch("/logout")
+              .then(stream => stream.json())
+              .then(function(data) {
+                  if (data.ok === true){
+                    app.authed = false;
+                  }
+              });
+        },
         selectAndCopyKubeconfig: function() {
             var kc = document.getElementById("kubeconfig");
             //kc.select();
@@ -22,8 +31,10 @@ var app = new Vue({
         fetch("/user")
             .then(stream => stream.json())
             .then(function(data) {
+            if (data.error === false && "name" in data){
                 app.authed = true;
                 app.user = data;
+                }
             });
     }
 });
