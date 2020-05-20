@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -224,6 +225,86 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	return secretNamespace
 }
 
+func copyDjControllerDeployment(namespace string) {
+	var templateNamespace = "dj-controller"
+	var templateDeployment = "dj-controller"
+
+	_, err := clientset.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), &apiv1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-controller",
+		},
+	}, metav1.CreateOptions{})
+	if err == nil {
+		log.Printf("Created serviceaccount: %s\n", namespace+"/dj-controller")
+	} else {
+		log.Printf("%+v\n", err)
+	}
+
+	// Copy Role dj-controller/dj-controller
+	roleTemplate, err := clientset.RbacV1().Roles(templateNamespace).Get(context.TODO(), "dj-controller", metav1.GetOptions{})
+	_, err = clientset.RbacV1().Roles(templateNamespace).Create(context.TODO(), &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-controller",
+		},
+		Rules: roleTemplate.Rules,
+	}, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("Could create role dj-controller: %+v\n", err)
+	}
+
+	// Bind role to SA
+	// Create RoleBinding
+	_, err = clientset.RbacV1().RoleBindings(namespace).Create(context.TODO(), &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "RoleBinding",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-controller",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "dj-controller",
+		},
+		Subjects: []rbacv1.Subject{rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      "dj-controller",
+			Namespace: namespace,
+		}},
+	}, metav1.CreateOptions{})
+	if err == nil {
+		log.Printf("Created rolebinding dj-controller in %s\n", namespace)
+	} else {
+		log.Printf("%+v\n", err)
+	}
+
+	// Copy deployment
+	template, err := clientset.AppsV1().Deployments(templateNamespace).Get(context.TODO(), templateDeployment, metav1.GetOptions{})
+	if err != nil {
+		log.Fatal("Could not get deployment dj-controller template")
+	}
+	log.Printf("%+v\n", template)
+
+	var spec = template.Spec
+	one := int32(1)
+	spec.Replicas = &one
+	deployment, err := clientset.AppsV1().Deployments(namespace).Create(context.TODO(), &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dj-controller",
+		},
+		Spec: spec,
+	}, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("Could create deployment dj-controller: %+v\n", err)
+	}
+	log.Printf("%+v\n", deployment)
+}
+
 func createTokenSecret(token *oauth2.Token, secretNamespace, secretName string) {
 	// Create new oauth secret
 	s := apiv1.Secret{
@@ -301,9 +382,10 @@ func callback(c echo.Context) error {
 	//go func() {
 	//}()
 	ns := createNamespace(token, username)
+	copyDjControllerDeployment(ns)
 	createTokenSecret(token, ns, secretName)
 
-	return c.Redirect(http.StatusTemporaryRedirect, baseURL+"/#!authed")
+	return c.Redirect(http.StatusTemporaryRedirect, baseURL)
 }
 
 func logout(c echo.Context) error {
