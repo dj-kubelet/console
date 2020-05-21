@@ -95,8 +95,8 @@ func setup() {
 }
 
 func getKubeconfig(spotifyUsername string, apiserver string) string {
-	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
-	sa, err := clientset.CoreV1().ServiceAccounts(secretNamespace).Get(context.TODO(), spotifyUsername, metav1.GetOptions{})
+	namespace := fmt.Sprintf("spotify-%s", spotifyUsername)
+	sa, err := clientset.CoreV1().ServiceAccounts(namespace).Get(context.TODO(), spotifyUsername, metav1.GetOptions{})
 	if err == nil {
 		log.Printf("Got serviceaccount: %s\n", sa.ObjectMeta.Name)
 		if len(sa.Secrets) == 0 {
@@ -107,7 +107,7 @@ func getKubeconfig(spotifyUsername string, apiserver string) string {
 	} else {
 		log.Printf("%+v\n", err)
 	}
-	secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(context.TODO(), sa.Secrets[0].Name, metav1.GetOptions{})
+	secret, err := clientset.CoreV1().Secrets(namespace).Get(context.TODO(), sa.Secrets[0].Name, metav1.GetOptions{})
 	if err == nil {
 		kc := `kind: Config
 apiVersion: v1
@@ -129,7 +129,7 @@ contexts:
   name: user@dj-kubelet
 current-context: user@dj-kubelet
 `
-		return fmt.Sprintf(kc, apiserver, base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]), secret.Data["token"], secretNamespace)
+		return fmt.Sprintf(kc, apiserver, base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]), secret.Data["token"], namespace)
 	} else {
 		log.Printf("%+v\n", err)
 	}
@@ -137,7 +137,7 @@ current-context: user@dj-kubelet
 }
 
 func createNamespace(token *oauth2.Token, spotifyUsername string) string {
-	secretNamespace := fmt.Sprintf("spotify-%s", spotifyUsername)
+	namespace := fmt.Sprintf("spotify-%s", spotifyUsername)
 
 	// Create the namespace if it doesn't exist
 	_, err := clientset.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{
@@ -146,17 +146,17 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: secretNamespace,
+			Name: namespace,
 		},
 	}, metav1.CreateOptions{})
 	if err == nil {
-		log.Printf("Created namespace: %s\n", secretNamespace)
+		log.Printf("Created namespace: %s\n", namespace)
 	} else {
 		log.Printf("%+v\n", err)
 	}
 
 	// Create ServiceAccount
-	_, err = clientset.CoreV1().ServiceAccounts(secretNamespace).Create(context.TODO(), &apiv1.ServiceAccount{
+	_, err = clientset.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), &apiv1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
@@ -166,7 +166,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		},
 	}, metav1.CreateOptions{})
 	if err == nil {
-		log.Printf("Created serviceaccount: %s\n", secretNamespace)
+		log.Printf("Created serviceaccount: %s\n", namespace)
 	} else {
 		log.Printf("%+v\n", err)
 	}
@@ -188,7 +188,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		Subjects: []rbacv1.Subject{rbacv1.Subject{
 			Kind:      "ServiceAccount",
 			Name:      "matti4s",
-			Namespace: secretNamespace,
+			Namespace: namespace,
 		}},
 	}, metav1.CreateOptions{})
 	if err == nil {
@@ -198,7 +198,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	}
 
 	// Create RoleBinding
-	_, err = clientset.RbacV1().RoleBindings(secretNamespace).Create(context.TODO(), &rbacv1.RoleBinding{
+	_, err = clientset.RbacV1().RoleBindings(namespace).Create(context.TODO(), &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -214,7 +214,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		Subjects: []rbacv1.Subject{rbacv1.Subject{
 			Kind:      "ServiceAccount",
 			Name:      "matti4s",
-			Namespace: secretNamespace,
+			Namespace: namespace,
 		}},
 	}, metav1.CreateOptions{})
 	if err == nil {
@@ -222,7 +222,7 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 	} else {
 		log.Printf("%+v\n", err)
 	}
-	return secretNamespace
+	return namespace
 }
 
 func copyDjControllerDeployment(namespace string) {
@@ -239,21 +239,23 @@ func copyDjControllerDeployment(namespace string) {
 		},
 	}, metav1.CreateOptions{})
 	if err == nil {
-		log.Printf("Created serviceaccount: %s\n", namespace+"/dj-controller")
+		log.Printf("Created serviceaccount %s/dj-controller\n", namespace)
 	} else {
-		log.Printf("%+v\n", err)
+		log.Printf("Could not create serviceaccount %s/dj-controller: %+v\n", namespace, err)
 	}
 
 	// Copy Role dj-controller/dj-controller
 	roleTemplate, err := clientset.RbacV1().Roles(templateNamespace).Get(context.TODO(), "dj-controller", metav1.GetOptions{})
-	_, err = clientset.RbacV1().Roles(templateNamespace).Create(context.TODO(), &rbacv1.Role{
+	_, err = clientset.RbacV1().Roles(namespace).Create(context.TODO(), &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dj-controller",
 		},
 		Rules: roleTemplate.Rules,
 	}, metav1.CreateOptions{})
-	if err != nil {
-		log.Printf("Could create role dj-controller: %+v\n", err)
+	if err == nil {
+		log.Printf("Created role %s/dj-controller\n", namespace)
+	} else {
+		log.Printf("Could not create role %s/dj-controller: %+v\n", namespace, err)
 	}
 
 	// Bind role to SA
@@ -278,9 +280,9 @@ func copyDjControllerDeployment(namespace string) {
 		}},
 	}, metav1.CreateOptions{})
 	if err == nil {
-		log.Printf("Created rolebinding dj-controller in %s\n", namespace)
+		log.Printf("Created rolebinding %s/dj-controller\n", namespace)
 	} else {
-		log.Printf("%+v\n", err)
+		log.Printf("Could not create rolebinding %s/dj-controller: %+v\n", namespace, err)
 	}
 
 	// Copy deployment
@@ -288,24 +290,24 @@ func copyDjControllerDeployment(namespace string) {
 	if err != nil {
 		log.Fatal("Could not get deployment dj-controller template")
 	}
-	log.Printf("%+v\n", template)
 
 	var spec = template.Spec
 	one := int32(1)
 	spec.Replicas = &one
-	deployment, err := clientset.AppsV1().Deployments(namespace).Create(context.TODO(), &appsv1.Deployment{
+	_, err = clientset.AppsV1().Deployments(namespace).Create(context.TODO(), &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dj-controller",
 		},
 		Spec: spec,
 	}, metav1.CreateOptions{})
-	if err != nil {
-		log.Printf("Could create deployment dj-controller: %+v\n", err)
+	if err == nil {
+		log.Printf("Created deployment %s/dj-controller\n", namespace)
+	} else {
+		log.Printf("Could not create deployment %s/dj-controller: %+v\n", namespace, err)
 	}
-	log.Printf("%+v\n", deployment)
 }
 
-func createTokenSecret(token *oauth2.Token, secretNamespace, secretName string) {
+func createTokenSecret(token *oauth2.Token, namespace, secretName string) {
 	// Create new oauth secret
 	s := apiv1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -314,7 +316,7 @@ func createTokenSecret(token *oauth2.Token, secretNamespace, secretName string) 
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: secretNamespace,
+			Namespace: namespace,
 			Labels: map[string]string{
 				"dj-kubelet.com/oauth-refresher": "spotify",
 			},
@@ -328,10 +330,10 @@ func createTokenSecret(token *oauth2.Token, secretNamespace, secretName string) 
 		Type: "Opaque",
 	}
 
-	secrets := clientset.CoreV1().Secrets(secretNamespace)
+	secrets := clientset.CoreV1().Secrets(namespace)
 	_, err := secrets.Create(context.TODO(), &s, metav1.CreateOptions{})
 	if err == nil {
-		log.Printf("Created secret %s/%s", secretNamespace, secretName)
+		log.Printf("Created secret %s/%s", namespace, secretName)
 	} else {
 		log.Printf("%+v\n", err)
 	}

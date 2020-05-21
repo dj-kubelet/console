@@ -67,7 +67,16 @@ rules:
   resources:
   - clusterrolebindings
   - rolebindings
+  - roles
   verbs:
+  - create
+
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  verbs:
+  - get
   - create
 
 - apiGroups: ["dj-kubelet.com"]
