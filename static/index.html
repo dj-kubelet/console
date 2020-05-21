@@ -23,7 +23,7 @@
         <p>Nice to have you here {{user.name}}!</p>
         <p>Let's rock and roll!</p>
         <section class="field-row" style="justify-content: flex-end">
-          <button v-on:click="selectAndCopyKubeconfig">Copy Kubeconfig</button>
+          <button v-on:click="copyKubeconfig">Copy Kubeconfig</button>
         </section>
       </div>
       </template>
@@ -49,7 +49,7 @@
     </div>
   </div>
   <div class="window-body">
-    <pre id="kubeconfig" style="overflow-wrap: normal; overflow-x: scroll;">
+    <pre style="overflow-x: scroll;">
 Microsoft&#10094;R&#10095; Windows DOS
 &#10094;C&#10095; Copyright Microsoft Corp 1990-2001.
 
