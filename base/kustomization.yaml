@@ -3,3 +3,4 @@ resources:
 - rbac.yaml
 - secret.yaml
 - roles.yaml
+- service.yaml
