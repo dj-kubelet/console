@@ -3,9 +3,9 @@
 The dj-kubelet console is what users interact with and log in to create their dj-kubelet namespaces.
 
 ```bash
-# Build and load image into kind nodes
+# Build and load image into the dj-kubelet kind nodes
 docker build -t console .
-kind load docker-image console:latest
+kind load docker-image --name dj-kubelet console:latest
 
 kubectl create namespace console
 cfssl selfsign localhost <(cfssl print-defaults csr) | cfssljson -bare development/server
@@ -13,6 +13,8 @@ cfssl selfsign localhost <(cfssl print-defaults csr) | cfssljson -bare developme
 kubectl apply -k ./development
 
 kubectl -n console get pods
+curl -k https://localhost:30443
+# Or kubectl port forward if kind is not doing it.
 kubectl -n console port-forward deployment/console 8443:8443
 ```
 
