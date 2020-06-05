@@ -105,7 +105,7 @@ func getKubeconfig(spotifyUsername string, apiserver string) string {
 			log.Printf("sa secret: %s\n", sa.Secrets[0].Name)
 		}
 	} else {
-		log.Printf("%+v\n", err)
+		log.Printf("%s is not authenticated\n", spotifyUsername)
 	}
 	secret, err := clientset.CoreV1().Secrets(namespace).Get(context.TODO(), sa.Secrets[0].Name, metav1.GetOptions{})
 	if err == nil {
@@ -246,6 +246,12 @@ func copyDjControllerDeployment(namespace string) {
 
 	// Copy Role dj-controller/dj-controller
 	roleTemplate, err := clientset.RbacV1().Roles(templateNamespace).Get(context.TODO(), "dj-controller", metav1.GetOptions{})
+	if err == nil {
+		log.Printf("Got template role %s/dj-controller\n", templateNamespace)
+		log.Printf("dj-controller rules: %+v\n", roleTemplate.Rules)
+	} else {
+		log.Printf("Could not get template role %s/dj-controller: %+v\n", templateNamespace, err)
+	}
 	_, err = clientset.RbacV1().Roles(namespace).Create(context.TODO(), &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dj-controller",
