@@ -13,6 +13,7 @@ cfssl selfsign localhost <(cfssl print-defaults csr) | cfssljson -bare developme
 kubectl apply -k ./development
 
 kubectl -n console get pods
+kubectl -n console logs -lapp=console -f
 curl -k https://localhost:30443
 # Or kubectl port forward if kind is not doing it.
 kubectl -n console port-forward deployment/console 8443:8443
