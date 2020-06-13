@@ -1,3 +1,4 @@
+# This role gives users access to read cluster information
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -20,6 +21,8 @@ rules:
 
 ---
 
+# This role is bound in a namespaced RoleBinding so access is not granted
+# to other namespaces.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -35,3 +38,12 @@ rules:
   - watch
   - create
   - delete
+
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  resourceNames:
+  - spotify-oauth
