@@ -24,3 +24,4 @@ Huge props to:
 - https://github.com/botoxparty/XP.css
 - https://github.com/jdan/98.css
 - https://github.com/vuejs/vue
+- https://win98icons.alexmeub.com/

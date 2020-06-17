@@ -1,3 +1,57 @@
 body {
   background-color: #048284;
+  margin: 0;
+}
+
+.start-bar {
+  background: #c0c0c0;
+  width: 100%;
+  min-width: 390px;
+  height: 27px;
+  bottom: 0px;
+  position: absolute;
+  border-top: 1px solid #f4f4f4;
+}
+
+.start-button {
+  background-image: url(start-button.png);
+  background-repeat: no-repeat;
+  background-position: 2px;
+  width: 45px;
+  height: 14px;
+  float: left;
+  margin: 2px;
+  vertical-align: middle;
+  display: inline-block;
+  padding: 3px;
+  background-color: silver;
+  border-top: 1px solid #f4f4f4;
+  border-left: 1px solid #f4f4f4;
+  border-right: 1px solid gray;
+  border-bottom: 1px solid gray;
+  box-shadow: inset 1px 1px #dfdfdf, 1px 0 #000, 0 1px #000, 1px 1px #000;
+}
+
+.inlet {
+  float:right;
+  display: inline-block;
+  width: 50px;
+  border: 1px solid;
+  border-color: rgb(128, 128, 128) rgb(255, 255, 255) rgb(255, 255, 255) rgb(128, 128, 128);
+  height: 20px;
+  margin: 2px;
+  vertical-align: middle;
+  line-height: 20px;
+  font-family: "Pixelated MS Sans Serif",Arial;
+}
+
+.desktop-icons {
+  position: absolute;
+  bottom: 70px;
+  right: 50px;
+  width: 70px;
+}
+
+.desktop-icon {
+  margin-top: 50px;
 }
