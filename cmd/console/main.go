@@ -147,6 +147,9 @@ func createNamespace(token *oauth2.Token, spotifyUsername string) string {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
+			Labels: map[string]string{
+				"dj-kubelet.com/managed": "true",
+			},
 		},
 	}, metav1.CreateOptions{})
 	if err == nil {
