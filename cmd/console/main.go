@@ -331,10 +331,10 @@ func createTokenSecret(token *oauth2.Token, namespace, secretName string) {
 			},
 		},
 		Data: map[string][]byte{
-			"accesstoken":  []byte(token.AccessToken),
-			"refreshtoken": []byte(token.RefreshToken),
-			"expiry":       []byte(token.Expiry.Format(time.RFC3339)),
-			"updated":      []byte(time.Now().Format(time.RFC3339)),
+			"access_token":  []byte(token.AccessToken),
+			"refresh_token": []byte(token.RefreshToken),
+			"expiry":        []byte(token.Expiry.Format(time.RFC3339)),
+			"updated":       []byte(time.Now().Format(time.RFC3339)),
 		},
 		Type: "Opaque",
 	}
